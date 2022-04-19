@@ -460,7 +460,7 @@ select * from tbl_employee where id=${id} and last_name=#{lastName}
 
   
 
-### insert\update\delete
+### insert\update\delete 
 
 | 属性             | 说明                                                         |
 | ---------------- | ------------------------------------------------------------ |

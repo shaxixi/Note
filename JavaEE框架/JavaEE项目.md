@@ -1184,3 +1184,391 @@
 
 
 
+## 前端环境搭建（分布式）
+
+* 架构
+  网关 ==> 视图层（消费者） ==> 数据层 （生产者）==> 辅助层（被依赖）
+  注册中心 <==> 消费者订阅，生产者注册
+  第三方接口 <==> 接口已在注册中心，需要消费者订阅和远程调用
+  模块 <==> 独立的服务器，模块之间调用用注册中心方式，模块对外调用用第三方接口
+
+  > 实体类 `entity`         MySQL `mysql-provider`           Redis `redis-provider`
+  >
+  > \> 分布式必要模块：
+  > 注册中心 `eureka`                网关 `zuul`                     API  `api`
+  >
+  > \> 按需模块：
+  > 会员中心 `authentication-consumer`        项目维护 `project-consumer`
+  > 订单维护 `order-consumer`                           支付功能 `pay-consumer`
+
+### entity实体类辅助层
+
+* 实体类可细分：
+
+  > 视图对象 `VO`  + 数据对象 `DO`  ==> 数据传输对象 `DTO` ==> 持久化对象 `PO` 
+  >
+  > VO：浏览器交换数据
+  > DO：内存、搜索引擎、中间件、第三方接口交换数据
+  > DTO：消费者和生产者交换数据
+  > PO：数据库交换数据
+
+* 不同实体类之间复制方法：
+   `org.springframework.beans.BeanUtils.copyProperties(Object from, Object to)`
+
+*  `lombok` jar包： getXxx()、setXxx()、有参构造器、无参构造器等等用注解代替
+
+  > eclipse用该jar包时需要相关设置，较麻烦，可查资料
+
+  | 注解                       | 说明                                                         |
+  | -------------------------- | ------------------------------------------------------------ |
+  | @Data                      | 每一个字段都加入 getXxx()、setXxx()方法                      |
+  | @NoArgsConstructor         | 无参构造器                                                   |
+  | @AllArgsConstructor        | 全部字段都包括的构造器                                       |
+  | @EqualsAndHashCode：equals | hashCode 方法                                                |
+  | @Getter                    | 类：所有字段都加入 getXxx()方法<br/>字段：当前字段加入 getXxx()方法 |
+  | @Setter                    | 类：所有字段都加入 setXxx()方法<br/>字段：当前字段加入 setXxx()方法 |
+
+### eureka注册中心
+
+* 分布式模拟多个服务区，方式：不同模块不同端口号
+
+* 相关依赖
+
+  ~~~xml
+  <dependencies>
+      <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-server</artifactId>
+      </dependency>
+  </dependencies>
+  ~~~
+
+* 主启动类
+
+  ~~~java
+  @EnableEurekaServer // 允许注册服务
+  @SpringBootApplication
+  public class CrowdMainClass {
+  public static void main(String[] args) {
+  	SpringApplication.run(CrowdMainClass.class, args);
+  }
+  ~~~
+
+* 配置文件
+
+  ~~~yaml
+  server:
+  	port: 1000
+  spring:
+  	application:
+  		name: atguigu-crowd-eureka
+  eureka:
+  	instance:
+  		hostname: localhost
+  	client:
+  		register-with-eureka: false
+          fetch-registry: false
+  		service-url:
+  			defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  ~~~
+
+### mysql数据库服务层
+
+* 逆向生成entity/XxxPO、entity/XxxPOExample、XxxPOMapper.java、XxxPOMapper.xml
+
+* 相关依赖
+
+  ~~~xml
+  <!-- 整合 MyBatis -->
+  <dependency>
+      <groupId>org.mybatis.spring.boot</groupId>
+      <artifactId>mybatis-spring-boot-starter</artifactId>
+  </dependency>
+  <!-- MySQL 驱动 -->
+  <dependency>
+      <groupId>mysql</groupId>
+      <artifactId>mysql-connector-java</artifactId>
+  </dependency>
+  <!-- 数据库连接池 -->
+  <dependency>
+      <groupId>com.alibaba</groupId>
+      <artifactId>druid</artifactId>
+  </dependency>
+  <!-- SpringBoot 测试 -->
+  <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+  <scope>test</scope>
+  </dependency>
+  
+  <!--【生产者】 对外暴露服务 -->
+  <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+  </dependency>
+  <!-- 【消费者】作为客户端访问 Eureka 注册中心 -->
+  <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+  </dependency>
+  
+  <!-- 为了能够使用实体类 -->
+  <dependency>
+      <groupId>com.atguigu.crowd</groupId>
+      <artifactId>atcrowdfunding09-member-entity</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+  </dependency>
+  <!-- 为了能够使用工具类 -->
+  <dependency>
+      <groupId>com.atguigu.crowd</groupId>
+      <artifactId>atcrowdfunding05-common-util</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+  </dependency>
+  ~~~
+
+* 主启动类
+
+  ~~~java
+  @MapperScan("com.atguigu.crowd.mapper") // 扫描 MyBatis 的 Mapper 接口所在的包
+  @SpringBootApplication
+  public class CrowdMainClass {
+      public static void main(String[] args) {
+      	SpringApplication.run(CrowdMainClass.class, args);
+  	}
+  }
+  ~~~
+
+* 配置文件
+
+  ~~~yaml
+  server:
+  	port: 2000
+  spring:
+  	application:
+  		name: atguigu-crowd-mysql
+  	datasource:
+          name: mydb
+          type: com.alibaba.druid.pool.DruidDataSource
+          url: jdbc:mysql://127.0.0.1:3306/project_crowd?serverTimezone=UTC
+          username: root
+          password: root
+          driver-class-name: com.mysql.cj.jdbc.Driver
+  eureka: # 注册到注册中心
+  	client:
+  		service-url:
+  			defaultZone: http://localhost:1000/eureka
+  mybatis: # 配置Mapper
+  	mapper-locations: classpath*:/mybatis/mapper/*Mapper.xml
+  logging:
+  	level:
+          com.atguigu.crowd.mapper: debug
+          com.atguigu.crowd.test: debug
+  ~~~
+
+### Redis 内存服务层
+
+* 相关依赖
+
+  ~~~xml
+  <!-- 整合 Redis -->
+  <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-redis</artifactId>
+  </dependency>
+  <!-- 测试 -->
+  <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+  </dependency>
+  
+  <!-- 对外暴露服务 -->
+  <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+  </dependency>
+  <!-- 作为客户端访问 Eureka 注册中心 -->
+  <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+  </dependency>
+  
+  <!-- 为了能够使用实体类 -->
+  <dependency>
+      <groupId>com.atguigu.crowd</groupId>
+      <artifactId>atcrowdfunding09-member-entity</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+  </dependency>
+  <!-- 为了能够使用工具类 -->
+  <dependency>
+      <groupId>com.atguigu.crowd</groupId>
+      <artifactId>atcrowdfunding05-common-util</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+  </dependency>
+  ~~~
+
+### api接口辅助层 ==> 对外暴露服务 
+
+* 相关依赖
+
+  ~~~xml
+  <!-- 开启api接口 -->
+  <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-openfeign</artifactId>
+  </dependency>
+  <dependency>
+      <groupId>com.atguigu.crowd</groupId>
+      <artifactId>atcrowdfunding05-common-util</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+  </dependency>
+  <dependency>
+      <groupId>com.atguigu.crowd</groupId>
+      <artifactId>atcrowdfunding09-member-entity</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+  </dependency>
+  ~~~
+
+* 创建API接口
+
+  ~~~java
+  @FeignClient("atguigu-crowd-mysql") // 暴露的mysql工程名：配置文件spring.application.name值
+  public interface MySQLRemoteService {
+      @RequestMapping("/get/memberpo/by/login/acct/remote") // 暴露的接口名
+      ResultEntity<MemberPO> getMemberPOByLoginAcctRemote(@RequestParam("loginacct")
+      String loginacct);
+  }
+  ~~~
+
+  ~~~java
+  @FeignClient("atguigu-crowd-redis") // 暴露的redis工程名
+  public interface RedisRemoteService {
+      @RequestMapping("/set/redis/key/value/remote")
+      ResultEntity<String> setRedisKeyValueRemote(
+          @RequestParam("key") String key,
+          @RequestParam("value") String value
+      );
+      
+      @RequestMapping("/set/redis/key/value/remote/with/timeout")
+      ResultEntity<String> setRedisKeyValueRemoteWithTimeout(
+          @RequestParam("key") String key,
+          @RequestParam("value") String value,
+          @RequestParam("time") long time,
+          @RequestParam("timeUnix") TimeUnit timeUnit
+      );
+      
+      @RequestMapping("/get/redis/string/value/by/key")
+      ResultEntity<String> getRedisStringValueByKeyRemote(@RequestParam("key") String key);
+      
+      @RequestMapping("/remove/redis/key/remote")
+      ResultEntity<String> removeRedisKeyRemote(@RequestParam("key") String key);
+  }
+  ~~~
+
+* 服务层模块即可根据暴露的接口名(requestMapping)编写对应的Handler、service、serviceImpl
+
+### authentication会员中心视图层
+
+* 相关依赖
+
+  ~~~xml
+  <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+  </dependency>
+  <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-thymeleaf</artifactId>
+  </dependency>
+  <!-- 订阅注册中心 -->
+  <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+  </dependency>
+  <!-- 依赖api接口 -->
+  <dependency>
+      <groupId>com.atguigu.crowd</groupId>
+      <artifactId>atcrowdfunding17-member-api</artifactId>
+      <version>0.0.1-SNAPSHOT</version>
+  </dependency>
+  ~~~
+
+* 配置文件
+
+  ~~~yaml
+  server:
+  	port: 4000
+  spring:
+  	application:
+  		name: atguigu-crowd-auth
+  	thymeleaf:
+  		prefix: classpath:/templates/
+  		suffix: .html
+  eureka:
+  	client:
+  		service-url:
+  			defaultZone: http://localhost:1000/eureka
+  ~~~
+
+* 编写Handler、service、serviceImpl
+
+* 静态资源按Springboot要求放在static目录下
+
+* 引入thymeleaf
+
+  ~~~html
+  <html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+  ~~~
+
+### zuul网关
+
+* 相关依赖
+
+  ~~~xml
+  <!-- 注册中心 -->
+  <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+  </dependency>
+  <!-- 网关 -->
+  <dependency>
+      <groupId>org.springframework.cloud</groupId>
+      <artifactId>spring-cloud-starter-netflix-zuul</artifactId>
+  </dependency>
+  ~~~
+
+* 主启动类
+
+  ~~~java
+  @EnableZuulProxy // 开启网关代理
+  @SpringBootApplication
+  public class CrowdMainClass {
+      public static void main(String[] args) {
+      	SpringApplication.run(CrowdMainClass.class, args);
+      }
+  }
+  ~~~
+
+* 配置文件
+
+  ~~~yaml
+  server:
+  	port: 80
+  spring:
+  	application:
+  		name: atguigu-crowd-zuul
+  eureka:
+  	client:
+  	service-url:
+  		defaultZone: http://localhost:1000/eureka
+  zuul:
+  	ignored-services: "*"
+  	sensitive-headers: "*" # 在 Zuul 向其他微服务重定向时保持原本头信息（请求头、响应头）
+  	routes:
+  		crowd-portal:
+  			service-id: atguigu-crowd-auth
+  			path: /** # 这里一定要使用两个“*”号，不然“/”路径后面的多层路径将无法访问
+  ~~~
+
+  
+
