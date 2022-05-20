@@ -1003,7 +1003,7 @@ public class HelloServlet implements Servlet {
       @Override
       protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
   
-            System.out.println( resp.getCharacterEncoding() );//默认ISO-8859-1
+            System.out.println( resp.get() );//默认ISO-8859-1
   
           // 设置服务器字符集为UTF-8
           resp.setCharacterEncoding("UTF-8");
